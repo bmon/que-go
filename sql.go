@@ -33,6 +33,7 @@ WITH RECURSIVE jobs AS (
     FROM que_jobs AS j
     WHERE queue = $1::text
     AND run_at <= now()
+	AND completed_at IS NULL
     ORDER BY priority, run_at, job_id
     LIMIT 1
   ) AS t1
@@ -44,6 +45,7 @@ WITH RECURSIVE jobs AS (
         FROM que_jobs AS j
         WHERE queue = $1::text
         AND run_at <= now()
+		AND completed_at IS NULL
         AND (priority, run_at, job_id) > (jobs.priority, jobs.run_at, jobs.job_id)
         ORDER BY priority, run_at, job_id
         LIMIT 1
@@ -91,12 +93,16 @@ VALUES
 (coalesce($1::text, ''::text), coalesce($2::smallint, 100::smallint), coalesce($3::timestamptz, now()::timestamptz), $4::text, coalesce($5::json, '[]'::json))
 `
 
+	// the DeleteJob no longer deletes records, it simply marks them as completed.
+	// This is useful as I can make jobs unique without extra effort, by creating
+	// a unique index on the args field.
 	sqlDeleteJob = `
-DELETE FROM que_jobs
-WHERE queue    = $1::text
-AND   priority = $2::smallint
-AND   run_at   = $3::timestamptz
-AND   job_id   = $4::bigint
+UPDATE que_jobs
+SET completed_at = now()
+WHERE queue      = $1::text
+AND   priority   = $2::smallint
+AND   run_at     = $3::timestamptz
+AND   job_id     = $4::bigint
 `
 
 	sqlJobStats = `
